@@ -283,7 +283,7 @@ class SimBEV:
         self.created_region_types = {}
         self.car_types = {}
         self.user_groups = {}
-        self.grid_data_list = []
+        self.grid_data_list = {}
         self.analysis_data_list = []
         self.terminated = False
         self.charging_probability_warning_flag = False
@@ -494,7 +494,7 @@ class SimBEV:
         if self.output_options["region_plot"] or self.output_options["collective_plot"]:
             plot.plot_gridtimeseries_by_usecase(self, grid_time_series_all_regions)
 
-    def run(self, region):
+    def run(self, region: Region):
         """Runs Simulation for single-processing
 
         Parameters
@@ -673,7 +673,7 @@ class SimBEV:
                     region.id,
                 )
             print(f" - done (Region {region.number + 1}) at {datetime.datetime.now()}")
-            return region.grid_data_frame, region.analyze_array
+            return region.grid_data_frame, region.analyze_array, region.id
         except Exception as e:
             if self.num_threads > 1:
                 print("\n{}: {}".format(type(e).__name__, e))
@@ -683,7 +683,7 @@ class SimBEV:
                     )
                 )
 
-                return None, None
+                return None, None, None
             raise e
 
     def get_charging_capacity(self, location=None, use_case=None, distance=None):
@@ -836,7 +836,8 @@ class SimBEV:
         """
         result_grid = result[0]
         result_analysis = result[1]
-        self.grid_data_list.append(result_grid)
+        region_id = result[2]
+        self.grid_data_list[region_id] = result_grid
 
         columns = [
             "car_type",
@@ -956,7 +957,7 @@ class SimBEV:
 
         if self.output_options["grid"]:
             grid_ts_collection = None
-            for data in self.grid_data_list:
+            for data in self.grid_data_list.values():
                 if grid_ts_collection is None:
                     grid_ts_collection = data.copy()
                 else:

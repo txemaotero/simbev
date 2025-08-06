@@ -23,9 +23,9 @@ def plot_gridtimeseries_by_usecase(simbev, grid_timeseries_all):
     y_title = "P in kW"
 
     if simbev.output_options["region_plot"]:
-        for idx, data in enumerate(simbev.grid_data_list):
+        for region_id, data in simbev.grid_data_list.items():
             df_results = data.set_index("timestamp")
-            figname = "grid-time-series region {}".format(idx + 1)
+            figname = "grid-time-series region {}".format(region_id)
             fig = px.line(df_results[plot_list], title=figname, labels=label_list)
             fig.update_layout(yaxis_title=y_title)
             fig.write_html("{}/{}.html".format(simbev.save_directory, figname))
