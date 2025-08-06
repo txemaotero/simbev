@@ -469,7 +469,7 @@ class Trip:
                 hpc_distance,
                 self.drive_start,
                 self.drive_timestamp,
-                hpc_drive_time,
+                max(1, hpc_drive_time),
                 "hpc",
                 self.extra_urban,
             )
