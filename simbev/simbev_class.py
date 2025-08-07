@@ -300,6 +300,16 @@ class SimBEV:
 
         self.step_size_str = str(self.step_size) + "min"
 
+    def set_start_date(self, new_start: datetime.date):
+        self.start_date_input = new_start
+        self.start_date = self.start_date_input - datetime.timedelta(days=7)
+        self.start_date_output = datetime.datetime.combine(
+            self.start_date_input, datetime.datetime.min.time()
+        )
+
+    def set_end_date(self, new_end: datetime.date):
+        self.end_date = new_end
+
     def setup(self):
         """Run setup functions. This creates user groups, car types and regions from input data."""
         # run setup functions
@@ -488,10 +498,14 @@ class SimBEV:
             raise SystemExit(
                 "Exception occurred during multiprocessing, simulation stopped. See above for further information."
             )
-        grid_time_series_all_regions = helpers.timeitlog(
+        plot_grid = self.output_options["region_plot"] or self.output_options["collective_plot"]
+        grid_time_series_all_regions = self.get_grid_time_series_all_regions() if plot_grid else None
+
+        helpers.timeitlog(
             self.output_options["timing"], self.save_directory
-        )(self.export_grid_timeseries_all_regions)()
-        if self.output_options["region_plot"] or self.output_options["collective_plot"]:
+        )(self.export_grid_timeseries_all_regions)(grid_time_series_all_regions)
+
+        if plot_grid:
             plot.plot_gridtimeseries_by_usecase(self, grid_time_series_all_regions)
 
     def run(self, region: Region):
@@ -878,7 +892,7 @@ class SimBEV:
 
         self.analysis_data_list.append(df_result_analysis)
 
-    def export_grid_timeseries_all_regions(self):
+    def export_grid_timeseries_all_regions(self, grid_ts_collection: None | pd.DataFrame = None):
         """Export of grid-timeseries of all regions.
 
         Returns
@@ -886,89 +900,96 @@ class SimBEV:
         DataFrame
             Returns grid-timeseries for all regions.
         """
-
-        start_date = self.start_date
-        number_of_days = self.end_date - start_date
-        number_of_days = number_of_days.days - 6  # deduction of 7 day cutoff
         if self.output_options["analyze"]:
-            analysis_collection = None
-            for data in self.analysis_data_list:
-                if analysis_collection is None:
-                    analysis_collection = data.copy()
-                else:
-                    analysis_collection = pd.concat([analysis_collection, data])
-            analysis_collection = analysis_collection.round(4)
-            analysis_collection = analysis_collection.reset_index(drop=True)
-            analysis_collection.to_csv(
-                pathlib.Path(self.save_directory, self.file_name_analysis_all),
-                index=False,
-            )
-
-            # get share of private and public charging events and save in .json.
-
-            array_to_numeric = [
-                "public_count",
-                "private_count",
-                "distance_cumulated",
-                "drive_count",
-            ]
-            for item in array_to_numeric:
-                analysis_collection[item] = pd.to_numeric(
-                    analysis_collection[[item]].squeeze()
-                )
-
-            share_dict = {
-                "share_private": round(
-                    analysis_collection[["private_count"]].sum().iloc[0]
-                    / (
-                        analysis_collection[["private_count"]].sum().iloc[0]
-                        + analysis_collection[["public_count"]].sum().iloc[0]
-                    ),
-                    4,
-                ),
-                "share_public": round(
-                    analysis_collection[["public_count"]].sum().iloc[0]
-                    / (
-                        analysis_collection[["private_count"]].sum().iloc[0]
-                        + analysis_collection[["public_count"]].sum().iloc[0]
-                    ),
-                    4,
-                ),
-                "trips_a_day": analysis_collection[["drive_count"]].sum().iloc[0]
-                / len(analysis_collection)
-                / number_of_days,
-                "average_distance_per_trip:": round(
-                    analysis_collection[["distance_cumulated"]].sum().iloc[0]
-                    / analysis_collection[["drive_count"]].sum().iloc[0],
-                    4,
-                ),
-                "average_distance_per_day": round(
-                    analysis_collection[["distance_cumulated"]].sum().iloc[0]
-                    / len(analysis_collection)
-                    / number_of_days,
-                    4,
-                ),
-            }
-
-            with open(
-                pathlib.Path(self.save_directory, self.file_name_analysis_all_json), "w"
-            ) as outfile:
-                json.dump(share_dict, outfile, indent=4, sort_keys=False)
+            self.export_analysis_all_regions()
 
         if self.output_options["grid"]:
-            grid_ts_collection = None
-            for data in self.grid_data_list.values():
-                if grid_ts_collection is None:
-                    grid_ts_collection = data.copy()
-                else:
-                    grid_ts_collection.loc[
-                        :, grid_ts_collection.columns != "timestamp"
-                    ] += data.loc[:, data.columns != "timestamp"]
-            grid_ts_collection = grid_ts_collection.round(4)
+            if grid_ts_collection is None:
+                grid_ts_collection = self.get_grid_time_series_all_regions()
             grid_ts_collection.to_csv(
                 pathlib.Path(self.save_directory, self.file_name_all), index=False
             )
-            return grid_ts_collection
+
+    def export_analysis_all_regions(self):
+        start_date = self.start_date
+        number_of_days = self.end_date - start_date
+        number_of_days = number_of_days.days - 6  # deduction of 7 day cutoff
+        analysis_collection = None
+        for data in self.analysis_data_list:
+            if analysis_collection is None:
+                analysis_collection = data.copy()
+            else:
+                analysis_collection = pd.concat([analysis_collection, data])
+        analysis_collection = analysis_collection.round(4)
+        analysis_collection = analysis_collection.reset_index(drop=True)
+        analysis_collection.to_csv(
+            pathlib.Path(self.save_directory, self.file_name_analysis_all),
+            index=False,
+        )
+
+        # get share of private and public charging events and save in .json.
+
+        array_to_numeric = [
+            "public_count",
+            "private_count",
+            "distance_cumulated",
+            "drive_count",
+        ]
+        for item in array_to_numeric:
+            analysis_collection[item] = pd.to_numeric(
+                analysis_collection[[item]].squeeze()
+            )
+
+        share_dict = {
+            "share_private": round(
+                analysis_collection[["private_count"]].sum().iloc[0]
+                / (
+                    analysis_collection[["private_count"]].sum().iloc[0]
+                    + analysis_collection[["public_count"]].sum().iloc[0]
+                ),
+                4,
+            ),
+            "share_public": round(
+                analysis_collection[["public_count"]].sum().iloc[0]
+                / (
+                    analysis_collection[["private_count"]].sum().iloc[0]
+                    + analysis_collection[["public_count"]].sum().iloc[0]
+                ),
+                4,
+            ),
+            "trips_a_day": analysis_collection[["drive_count"]].sum().iloc[0]
+            / len(analysis_collection)
+            / number_of_days,
+            "average_distance_per_trip:": round(
+                analysis_collection[["distance_cumulated"]].sum().iloc[0]
+                / analysis_collection[["drive_count"]].sum().iloc[0],
+                4,
+            ),
+            "average_distance_per_day": round(
+                analysis_collection[["distance_cumulated"]].sum().iloc[0]
+                / len(analysis_collection)
+                / number_of_days,
+                4,
+            ),
+        }
+
+        with open(
+            pathlib.Path(self.save_directory, self.file_name_analysis_all_json), "w"
+        ) as outfile:
+            json.dump(share_dict, outfile, indent=4, sort_keys=False)
+
+    def get_grid_time_series_all_regions(self) -> pd.DataFrame:
+        grid_ts_collection: None | pd.DataFrame = None
+        for data in self.grid_data_list.values():
+            if grid_ts_collection is None:
+                grid_ts_collection = data.copy()
+            else:
+                grid_ts_collection.loc[
+                    :, grid_ts_collection.columns != "timestamp"
+                ] += data.loc[:, data.columns != "timestamp"]
+        assert grid_ts_collection is not None, "Not computed regions, pleas provide any"
+        grid_ts_collection = grid_ts_collection.round(4)
+        return grid_ts_collection
 
     @classmethod
     def from_config(cls, config_path):
