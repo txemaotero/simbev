@@ -317,6 +317,18 @@ class SimBEV:
         self._create_car_types()
         self._add_regions_from_dataframe()
 
+    def filter_regions(self, regions_names: list[str]):
+        current_names = [reg.id for reg in self.regions]
+        assert all(name in current_names for name in regions_names), f"One of the given name is not a valid regions. Valid regions: {current_names}"
+        new_regions: list[Region] = []
+        i = 0
+        for reg in self.regions:
+            if reg.id not in regions_names:
+                continue
+            new_regions.append(Region(reg.id, reg.region_type, i, reg.car_dict, reg.scaling))
+            i += 1
+        self.regions = new_regions
+
     def _create_user_groups(self):
         """Parses user groups from input data."""
         for user_group_number in self.attractivity.index:

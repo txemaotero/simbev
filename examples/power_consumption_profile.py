@@ -9,65 +9,84 @@ import pandas as pd
 import numpy as np
 from simbev.simbev_class import SimBEV
 
+COMPONENT_COLS = [
+    "home_detached_total_power",
+    "home_apartment_total_power",
+    "work_total_power",
+    "street_total_power",
+    "retail_total_power",
+    "urban_fast_total_power",
+    "highway_fast_total_power",
+]
+
 def aggregate_total_power(grid_time_series_all_regions: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     """
     Return
     ------
     np.ndarray: 0 row = timestamp, 1 row aggregation
     """
-    cols = [
-        "home_detached_total_power",
-        "home_apartment_total_power",
-        "work_total_power",
-        "street_total_power",
-        "retail_total_power",
-        "urban_fast_total_power",
-        "highway_fast_total_power",
-    ]
     timestamps = grid_time_series_all_regions["timestamp"].to_numpy()
-    total_power = grid_time_series_all_regions[cols].sum(axis=1).to_numpy()
+    total_power = grid_time_series_all_regions[COMPONENT_COLS].sum(axis=1).to_numpy()
     return timestamps, total_power
 
-parser = argparse.ArgumentParser(
-    description="Run simbev in a given date range and return the power consumption profile"
-)
-parser.add_argument(
-    "config_path",
-    help="Set the config path.",
-)
+def plot_power_components(grid_time_series_all_regions: pd.DataFrame, columns: list[str] | None = None) -> None:
+    """
+    Plots each power component individually with a legend.
+    """
+    if columns is None:
+        columns = COMPONENT_COLS
+    else:
+        assert all(c in COMPONENT_COLS for c in columns), "Invalid given column"
 
-parser.add_argument(
-    "-b",
-    "--begin",
-    type=lambda s: datetime.datetime.strptime(s, '%Y-%m-%d').date(),
-    help="First day to compute consumption. Format: YYYY-mm-dd",
-    dest="start_date"
-)
+    timestamps = grid_time_series_all_regions["timestamp"].to_numpy()
 
-parser.add_argument(
-    "-e",
-    "--end",
-    type=lambda s: datetime.datetime.strptime(s, '%Y-%m-%d').date(),
-    help="Last day to compute consumption. Format: YYYY-mm-dd",
-    dest="end_date"
-)
+    import matplotlib
+    matplotlib.use('Qt5Agg')
+    import matplotlib.pyplot as plt
 
-p_args = parser.parse_args()
-config_path = pathlib.Path(p_args.config_path).absolute()
+    plt.figure(figsize=(10, 6))
+    for col in columns:
+        plt.plot(timestamps, grid_time_series_all_regions[col], label=col)
 
-simbev, cfg = SimBEV.from_config(config_path)
+    plt.xlabel("Timestamp")
+    plt.ylabel("Power Consumption (kW)")  # Adjust units if needed
+    plt.title("Power Consumption by Category")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("curve.png")
+    # plt.show()
 
-simbev.set_start_date(p_args.start_date)
-simbev.set_end_date(p_args.end_date)
-simbev.setup()
-simbev.run_multi()
-grid_time_series_all_regions = simbev.get_grid_time_series_all_regions()
+def get_date(date_str: str) -> datetime.date:
+    return datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
 
-timestamps, power = aggregate_total_power(grid_time_series_all_regions)
 
-import matplotlib
-matplotlib.use('Qt5Agg')
+config_path = pathlib.Path("../scenarios/galicia/configs/galicia.cfg").absolute()
 
-import matplotlib.pyplot as plt
-plt.plot(timestamps, power)
-plt.show()
+meses = [
+    ("2023-02", "2023-02-01", "2023-03-01"),
+    ("2023-03", "2023-03-01", "2023-04-01"),
+    ("2023-04", "2023-04-01", "2023-05-01"),
+    ("2023-05", "2023-05-01", "2023-06-01"),
+    ("2023-06", "2023-06-01", "2023-07-01"),
+    ("2023-07", "2023-07-01", "2023-08-01"),
+    ("2023-08", "2023-08-01", "2023-09-01"),
+    ("2023-09", "2023-09-01", "2023-10-01"),
+    ("2023-10", "2023-10-01", "2023-11-01"),
+    ("2023-11", "2023-11-01", "2023-12-01"),
+    ("2023-12", "2023-12-01", "2024-01-01"),
+]
+
+for fname, start, end in meses:
+    print("Simulating", fname)
+    simbev, cfg = SimBEV.from_config(config_path)
+    simbev.set_start_date(get_date(start))
+    simbev.set_end_date(get_date(end))
+    simbev.setup()
+    simbev.run_multi()
+    grid_time_series_all_regions = simbev.get_grid_time_series_all_regions()
+    grid_time_series_all_regions.to_csv(fname + ".csv")
+
+
+# plot_power_components(grid_time_series_all_regions, ["highway_fast_total_power"])
+# plot_power_components(grid_time_series_all_regions)

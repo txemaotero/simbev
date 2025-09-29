@@ -159,8 +159,6 @@ class Region:
 
         self.last_time_step = len(self.region_type.time_series.index) - 1
 
-        self.car_dict = {}
-
         self.header_grid_ts = []
         self.grid_time_series = []
         self.grid_data_frame = []
